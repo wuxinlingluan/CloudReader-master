@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="xlog-1.5.1">
+    <CLASSES>
+      <root url="file://$PROJECT_DIR$/app/build/intermediates/exploded-aar/com.qbw.log/xlog/1.5.1/res" />
+      <root url="jar://$PROJECT_DIR$/app/build/intermediates/exploded-aar/com.qbw.log/xlog/1.5.1/jars/classes.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.qbw.log/xlog/1.5.1/45ae2145e9209d21a8f93c1634ffc84e7f6164bd/xlog-1.5.1-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

@@ -1,0 +1,196 @@
+package com.example.jingbin.cloudreader.ui.gank.child;
+
+import android.annotation.SuppressLint;
+import android.graphics.Bitmap;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
+import android.support.annotation.Nullable;
+import android.support.v4.app.Fragment;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.request.animation.GlideAnimation;
+import com.bumptech.glide.request.target.SimpleTarget;
+import com.example.jingbin.cloudreader.R;
+import com.example.jingbin.cloudreader.bean.JokeBean;
+import com.example.jingbin.cloudreader.bean.NewsBean;
+import com.example.jingbin.cloudreader.bean.WeChartBean;
+import com.example.jingbin.cloudreader.ui.gank.NewsWebActivity;
+import com.example.jingbin.cloudreader.utils.IntentUtils;
+import com.example.jingbin.cloudreader.utils.OkHttpClientUtils;
+import com.example.jingbin.cloudreader.utils.ToastUtil;
+import com.qbw.customview.RefreshLoadMoreLayout;
+import com.squareup.okhttp.Request;
+import com.zhy.adapter.recyclerview.CommonAdapter;
+import com.zhy.adapter.recyclerview.MultiItemTypeAdapter;
+import com.zhy.adapter.recyclerview.base.ViewHolder;
+
+import java.util.ArrayList;
+import java.util.List;
+
+
+/**
+ * Created by ${sheldon} on 2017/1/17.
+ */
+public class WeChatFragment extends Fragment implements RefreshLoadMoreLayout.CallBack {
+
+
+    private List<WeChartBean.ResultBean.ListBean> mDatas=new ArrayList<>();
+    protected static final int GET_SUCCESS =1<<0;
+    protected static final int NET_ERROR=1<<1;
+    protected static final int PULL_DOWN_REFRESHING=1<<2;//下拉刷新
+    protected static final int LOADING_MORE=1<<3;//上拉加载
+    private int pageNum=1;
+    private Message message;
+    private RefreshLoadMoreLayout mRefreshLoadMoreLayout;
+    private RecyclerView recyclerView;
+    private CommonAdapter<WeChartBean.ResultBean.ListBean> commonAdapter;
+
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        View inflate = inflater.inflate(R.layout.fragment_joke, null);
+        mRefreshLoadMoreLayout = (RefreshLoadMoreLayout)inflate.findViewById(R.id.rlm);//上拉加载 下拉刷新
+        mRefreshLoadMoreLayout.init(new RefreshLoadMoreLayout.Config(this).canRefresh(true).canLoadMore(true).autoLoadMore().showLastRefreshTime(getActivity() .getClass(), "yyyy-MM-dd").multiTask());//设置属性
+        recyclerView = (RecyclerView) mRefreshLoadMoreLayout.getContentView();
+        recyclerView.setLayoutManager(new LinearLayoutManager(getActivity()));
+        recyclerView.setHasFixedSize(true);
+        initEvent();
+        getAccountBalanceOperation(pageNum);
+        return inflate;
+    }
+    /**
+     * 上拉加载,下拉刷新
+     * */
+    private void initEvent() {
+    }
+
+
+    /**
+     * 获取news内容
+     */
+    private void getAccountBalanceOperation(final int pageNum) {
+        String url = "http://v.juhe.cn/weixin/query";
+        List<OkHttpClientUtils.Param> params = new ArrayList<OkHttpClientUtils.Param>();
+        params.add(new OkHttpClientUtils.Param("pno", pageNum+""));
+        params.add(new OkHttpClientUtils.Param("key", "d57cf2241b7ee0a9a6bbaa8b16cd3fa2"));
+        OkHttpClientUtils.postAsyn(url, params,
+                new OkHttpClientUtils.ResultCallback<WeChartBean>() {
+                    @Override
+                    public void onError(Request request, Exception e) {
+                        e.printStackTrace();
+                        // 隔0.15s发送网络错误的空消息
+                        mHandler.sendEmptyMessageDelayed(NET_ERROR, 150);
+                    }
+
+                    @Override
+                    public void onResponse(WeChartBean response) {
+                        if ("请求成功".equals(response.getReason())){
+                            message = mHandler.obtainMessage();
+                            message.what= GET_SUCCESS;
+                            message.obj= response.getResult();
+                            message.arg1=pageNum;//页码
+                            mHandler.sendMessage(message);
+                        }
+                    }
+
+                });
+    }
+    /**
+     * 定义消息处理器
+     */
+    @SuppressLint("HandlerLeak")
+    private Handler mHandler = new Handler() {
+        public void handleMessage(Message msg) {
+
+            switch (msg.what) {
+
+                case NET_ERROR:
+                    ToastUtil.showToast("网络故障");
+                    break;
+
+                case GET_SUCCESS:
+                    resetUpPullOrDownPullStatus();
+                    int page = message.arg1;
+                    if (page==1){ //如果是第一页
+                        WeChartBean.ResultBean resultBean = (WeChartBean.ResultBean) msg.obj;//获取数据
+                       mDatas= resultBean.getList();
+                        commonAdapter = new CommonAdapter<WeChartBean.ResultBean.ListBean>(getActivity(), R.layout.item_newslist, mDatas) {
+                            @Override
+                            protected void convert(final ViewHolder holder, WeChartBean.ResultBean.ListBean listBean, int position) {
+                                holder.setText(R.id.tv_news_title,mDatas.get(position).getTitle());//设置数据
+                                holder.setText(R.id.tv_new_from,"来源:"+mDatas.get(position).getSource());
+                                String thumbnail_pic_s = mDatas.get(position).getFirstImg();
+                                Glide.with(getActivity()).load(thumbnail_pic_s).asBitmap().into(new SimpleTarget<Bitmap>() {  //解析图片
+                                @Override
+                                public void onResourceReady(Bitmap resource, GlideAnimation<? super Bitmap> glideAnimation) {
+                                    holder.setImageBitmap(R.id.iv_news_icon,resource);
+                                }
+                            });
+                            }
+                        };
+                        recyclerView.setAdapter(commonAdapter);
+                    } else{ //加载更多
+                        WeChartBean.ResultBean resultBean = (WeChartBean.ResultBean) msg.obj;
+                        List<WeChartBean.ResultBean.ListBean> moredatas = resultBean.getList();
+                        if (!moredatas.isEmpty()){
+                            mDatas.addAll(moredatas);
+                            ToastUtil.showToast("加载成功");
+                            recyclerView.getAdapter().notifyDataSetChanged();
+                        }
+                    }
+
+                    commonAdapter.setOnItemClickListener(new MultiItemTypeAdapter.OnItemClickListener() {  //条目点击
+                        @Override
+                        public void onItemClick(View view, RecyclerView.ViewHolder holder, int position) {
+                            String url = mDatas.get(position).getUrl();
+                            Bundle bundle = new Bundle();
+                            bundle.putString("url",url);
+                            IntentUtils.changeActivity(getActivity(),NewsWebActivity.class,bundle);
+                        }
+
+                        @Override
+                        public boolean onItemLongClick(View view, RecyclerView.ViewHolder holder, int position) {
+                            return false;
+                        }
+                    });
+                    break;
+                case PULL_DOWN_REFRESHING:
+                    pageNum=1;
+                    getAccountBalanceOperation(pageNum);
+                    break;
+                case LOADING_MORE:
+                    pageNum++;
+                    getAccountBalanceOperation(pageNum);
+                    break;
+            }
+        };
+    };
+
+    //重置上拉下拉状态
+    private void resetUpPullOrDownPullStatus() {
+            if(mRefreshLoadMoreLayout.isCanLoadMore()){
+                mRefreshLoadMoreLayout.stopLoadMore();
+            }
+        if (mRefreshLoadMoreLayout.isCanRefresh()){
+            mRefreshLoadMoreLayout.stopRefresh();
+        }
+    }
+
+
+    @Override
+    public void onRefresh() {
+        mHandler.sendEmptyMessageDelayed(PULL_DOWN_REFRESHING, 150);
+    }
+
+    @Override
+    public void onLoadMore() {
+        mHandler.sendEmptyMessageDelayed(LOADING_MORE, 150);
+    }
+}
